@@ -1,0 +1,15 @@
+# Planning files
+DevOps Struktura.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# .NET build artifacts (if any local builds)
+bin/
+obj/
+publish/

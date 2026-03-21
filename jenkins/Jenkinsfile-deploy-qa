@@ -1,0 +1,116 @@
+/*
+------------------------------------------------------------
+PIPELINE DESCRIPTION
+------------------------------------------------------------
+Jenkins pipeline for deploying the Demo Web application to
+a traditional Windows IIS QA environment via SSH/SFTP.
+
+Target environment:
+- QA Web Server (Windows IIS)
+- Branch: develop
+
+This pipeline demonstrates a traditional (non-Kubernetes)
+deployment flow using SSH file transfer, including:
+- Zero-downtime deployment via app_offline.htm pattern
+- Discord webhook notifications on start / success / failure
+- Artifact archiving
+
+This pipeline is an alternative to the GitOps/Helm/ArgoCD
+approach and is used for environments not running Kubernetes.
+------------------------------------------------------------
+*/
+
+def msgTitleStart = "'${env.JOB_NAME}' pipeline has been triggered."
+def msgTitleEnd = "'${env.JOB_NAME}' pipeline is completed."
+def msgDesc = "Deploying 'Demo Web App v1.0.${env.BUILD_NUMBER}' to QA environment."
+def buildUrl = "${env.BUILD_URL}consoleFull"
+
+pipeline {
+    agent any
+
+    environment {
+        webhookURL = credentials('discord-webhook')
+    }
+
+    stages {
+        stage('Debug Information') {
+            steps {
+                script {
+                    echo "Pipeline Working Directory: ${env.WORKSPACE}"
+                    discordSend description: msgDesc, footer: "Deployment started...", result: "ABORTED", title: msgTitleStart, link: buildUrl, webhookURL: webhookURL
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    echo 'Checking out develop branch from https://github.com/your-org/demo-web-app.git'
+                    checkout scmGit(branches: [[name: '*/develop']], extensions: [], userRemoteConfigs: [[credentialsId: 'github-pat', url: 'https://github.com/your-org/demo-web-app.git']])
+                }
+            }
+        }
+
+        stage('Put Site Offline (app_offline.htm)') {
+            steps {
+                sshPublisher(publishers: [sshPublisherDesc(configName: 'qa-server-ssh', transfers: [sshTransfer(sourceFiles: '**/app_data/**', removePrefix: 'app_data/', remoteDirectory: '/WebSite QA/', excludes: '')])])
+                sleep 10
+            }
+        }
+
+        stage('Publish Project Files over SSH') {
+            steps {
+                sshPublisher(publishers: [sshPublisherDesc(configName: 'qa-server-ssh', transfers: [sshTransfer(sourceFiles: '**/*', removePrefix: '', remoteDirectory: '/WebSite QA/', excludes: '.config/**, .github/**, app_data/**, Jenkinsfile*')])])
+            }
+        }
+
+        stage('Bring Site Back Online') {
+            steps {
+                script {
+                    pwsh("C:\\scripts\\DeleteFileOnRemoteServer.ps1 -parmEnvVariableName QA_WRM_USER -parmServerName <qa-server-ip> -parmFilePath 'c:\\inetpub\\wwwroot\\WebSite QA\\app_offline.htm'")
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: '**/*',
+                   allowEmptyArchive: true,
+                   fingerprint: true,
+                   onlyIfSuccessful: true
+
+            cleanWs(
+                cleanWhenNotBuilt: false,
+                disableDeferredWipeout: true,
+                deleteDirs: true,
+                notFailBuild: true,
+            )
+        }
+
+        success {
+            discordSend description: "'Demo Web App v1.0.${env.BUILD_NUMBER}' has been released to QA environment.\n> https://beta.example.com/",
+                result: "SUCCESS",
+                footer: "Deployment succeeded.",
+                title: msgTitleEnd,
+                link: buildUrl,
+                webhookURL: webhookURL
+        }
+        failure {
+            discordSend description: "'Demo Web App v1.0.${env.BUILD_NUMBER}' failed to deploy!\n> https://beta.example.com/",
+                result: "FAILURE",
+                footer: "Deployment failed.",
+                title: msgTitleEnd,
+                link: buildUrl,
+                webhookURL: webhookURL
+        }
+        unstable {
+            discordSend description: "'Demo Web App v1.0.${env.BUILD_NUMBER}' completed with issues.\n> https://beta.example.com/",
+                result: "UNSTABLE",
+                footer: "Deployment unstable.",
+                title: msgTitleEnd,
+                link: buildUrl,
+                webhookURL: webhookURL
+        }
+    }
+}

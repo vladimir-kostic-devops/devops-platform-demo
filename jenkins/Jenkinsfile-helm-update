@@ -1,0 +1,152 @@
+/*
+------------------------------------------------------------
+PIPELINE DESCRIPTION
+------------------------------------------------------------
+Jenkins pipeline responsible for updating Helm chart values
+for the Demo Web application and triggering deployment
+via Argo CD using the GitOps model.
+
+Target environment:
+- K3S-based Kubernetes cluster (DEV)
+
+This pipeline:
+- Checks out the helm-charts Git repository
+- Updates the Docker image tag in the Helm values file
+- Commits and pushes the change to Git
+- Relies on Argo CD to automatically detect changes
+  and synchronize the application state in Kubernetes
+- Cleans up the workspace after execution
+
+This pipeline does NOT build application artifacts.
+It strictly manages deployment state following
+GitOps best practices.
+------------------------------------------------------------
+*/
+
+// ============================================================
+// CENTRALIZED CONFIGURATION MAP
+// ============================================================
+
+def CONFIG = [
+
+    // 1. GIT CONFIGURATION
+    GIT: [
+        REPO_URL: "https://github.com/your-org/helm-charts.git",
+        BRANCH: "main",
+        CREDS_ID: "github-pat",
+        REPO: 'your-org/helm-charts',
+        USER: 'devops-bot',
+        EMAIL: 'devops@example.com'
+    ],
+
+    // 2. HELM / VALUES CONFIGURATION
+    HELM: [
+        WEB_VALUES_DEV: "charts/demo-web-app/values-dev.yaml"
+    ]
+]
+
+// ============================================================
+// PIPELINE DEFINITION
+// ============================================================
+
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'IMAGE_TAG', description: 'Docker image tag to deploy')
+        string(name: 'APP_NAME',  defaultValue: 'demo-web-app', description: 'Application name')
+        string(name: 'ENV',       defaultValue: 'dev', description: 'Target environment')
+    }
+
+    stages {
+
+        stage('Debug Info') {
+            steps {
+                script {
+                    echo "=== DEPLOYMENT PARAMETERS ==="
+                    echo "Application: ${params.APP_NAME}"
+                    echo "Environment: ${params.ENV}"
+                    echo "Image Tag: ${params.IMAGE_TAG}"
+                    echo ""
+
+                    echo "=== GIT CONFIG ==="
+                    echo "Repository: ${CONFIG.GIT.REPO_URL}"
+                    echo "Branch: ${CONFIG.GIT.BRANCH}"
+                    echo "Git Credentials ID: ${CONFIG.GIT.CREDS_ID}"
+                    echo ""
+
+                    echo "=== HELM CONFIG ==="
+                    echo "Web values file: ${CONFIG.HELM.WEB_VALUES_DEV}"
+                    echo ""
+                }
+            }
+        }
+
+        stage('Checkout Helm Repository') {
+            steps {
+                script {
+                    echo "Checking out ${CONFIG.GIT.BRANCH} branch from ${CONFIG.GIT.REPO_URL}"
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: "*/${CONFIG.GIT.BRANCH}"]],
+                        extensions: [],
+                        userRemoteConfigs: [[
+                            credentialsId: CONFIG.GIT.CREDS_ID,
+                            url: CONFIG.GIT.REPO_URL
+                        ]]
+                    ])
+                }
+            }
+        }
+
+        stage('Update Helm Chart Tag') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: "${CONFIG.GIT.CREDS_ID}",
+                        usernameVariable: 'GH_USER',
+                        passwordVariable: 'GH_TOKEN'
+                    )
+                ]) {
+                    script {
+
+                        // Update image tag in values-dev.yaml
+                        bat """
+                            powershell -Command "(Get-Content '${CONFIG.HELM.WEB_VALUES_DEV}') -replace 'tag:.*', 'tag: \\"${IMAGE_TAG}\\"' | Set-Content '${CONFIG.HELM.WEB_VALUES_DEV}'"
+                        """
+
+                        // Switch to correct git branch
+                        bat """
+                            git fetch origin
+                            git checkout ${CONFIG.GIT.BRANCH}
+                            git pull origin ${CONFIG.GIT.BRANCH}
+                        """
+
+                        // Configure Git identity + authenticate using GH token
+                        bat """
+                            git config user.email "${CONFIG.GIT.EMAIL}"
+                            git config user.name  "${CONFIG.GIT.USER}"
+
+                            git remote set-url origin https://${env.GH_USER}:${env.GH_TOKEN}@github.com/${CONFIG.GIT.REPO}.git
+
+                            git add ${CONFIG.HELM.WEB_VALUES_DEV}
+                            git commit -m "Update image tags to ${IMAGE_TAG}"
+                            git push origin ${CONFIG.GIT.BRANCH}
+                        """
+                    }
+                }
+            }
+        }
+
+    }
+    post {
+        always {
+            cleanWs(
+                cleanWhenNotBuilt: false,
+                disableDeferredWipeout: true,
+                deleteDirs: true,
+                notFailBuild: true
+            )
+        }
+    }
+}

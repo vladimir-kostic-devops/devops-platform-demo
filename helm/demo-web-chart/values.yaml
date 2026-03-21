@@ -1,0 +1,71 @@
+# global contains values shared across all templates in this chart
+global:
+  # environment defines the deployment environment name
+  environment: default
+
+  # labels are applied to all Kubernetes resources
+  labels:
+    app: demo-web-app
+    environment: default
+
+  # securityContext defines container security settings
+  # Can be disabled if the base image does not support non-root execution
+  securityContext:
+    enabled: true
+    runAsNonRoot: true
+    runAsUser: 1000
+
+# replicaCount defines how many pod replicas will be created
+replicaCount: 1
+
+# image contains container image configuration
+image:
+  repository: ghcr.io/your-org/demo-web-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# service defines the internal Kubernetes Service
+service:
+  type: ClusterIP
+  port: 80
+
+# ingress configuration (disabled by default)
+ingress:
+  enabled: false
+
+# probes define container health checks
+# Endpoints must be implemented by the application
+probes:
+  liveness:
+    enabled: false
+    path: /health/live
+    initialDelaySeconds: 10
+    periodSeconds: 15
+
+  readiness:
+    enabled: false
+    path: /health/ready
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+# resources selects which resource profile will be used
+resources:
+  profile: small
+
+# resourceProfiles define reusable CPU/memory profiles
+resourceProfiles:
+  small:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+  medium:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

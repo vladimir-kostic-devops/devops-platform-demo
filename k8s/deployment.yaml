@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-web-app
+  namespace: demo-dev
+  labels:
+    app: demo-web-app
+    environment: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-web-app
+  template:
+    metadata:
+      labels:
+        app: demo-web-app
+        environment: dev
+    spec:
+      containers:
+        - name: demo-web-app
+          image: ghcr.io/your-org/demo-web-app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi

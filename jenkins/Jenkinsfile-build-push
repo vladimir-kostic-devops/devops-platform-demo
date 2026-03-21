@@ -1,0 +1,165 @@
+/*
+------------------------------------------------------------
+PIPELINE DESCRIPTION
+------------------------------------------------------------
+Jenkins pipeline for building and publishing the Demo Web
+application Docker image to GitHub Container Registry (GHCR).
+
+Target environment:
+- K3S-based Kubernetes cluster (DEV)
+
+This pipeline:
+- Checks out application source code
+- Builds and publishes the .NET application
+- Builds a Docker image
+- Pushes the image to GHCR with a unique build tag
+- Triggers a downstream GitOps pipeline responsible for
+  updating Helm charts and deploying via Argo CD
+- Cleans up the Jenkins workspace and local Docker artifacts
+
+This pipeline is intentionally limited to application build
+and image publication only. Deployment is handled separately
+following GitOps best practices.
+------------------------------------------------------------
+*/
+
+// ============================================================
+// CENTRALIZED CONFIGURATION MAP
+// ============================================================
+
+def CONFIG = [
+    // 1. GIT CONFIGURATION
+    GIT: [
+        REPO_URL: "https://github.com/your-org/demo-web-app.git",
+        BRANCH: "develop",
+        CREDS_ID: "github-pat",
+    ],
+
+    // 2. DOCKER / CONTAINER REGISTRY
+    DOCKER: [
+        REGISTRY: "ghcr.io",
+        ORG: "your-org",
+        WEB_IMAGE: "demo-web-app",
+        WEB_DOCKERFILE: "Dockerfile"
+    ],
+ ]
+
+// ============================================================
+// PIPELINE DEFINITION
+// ============================================================
+
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+    }
+
+    stages {
+
+        stage('Debug Info') {
+            steps {
+                script {
+                    echo "=== BUILD CONFIGURATION ==="
+                    echo "Build Number: ${env.BUILD_NUMBER}"
+                    echo ""
+                    echo "=== GIT CONFIG ==="
+                    echo "Repository: ${CONFIG.GIT.REPO_URL}"
+                    echo "Branch: ${CONFIG.GIT.BRANCH}"
+                    echo "Git Credentials ID: ${CONFIG.GIT.CREDS_ID}"
+                    echo ""
+                    echo "=== DOCKER CONFIG ==="
+                    echo "Registry: ${CONFIG.DOCKER.REGISTRY}/${CONFIG.DOCKER.ORG}"
+                    echo "Web Image: ${CONFIG.DOCKER.WEB_IMAGE}"
+                    echo ""
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "Checking out ${CONFIG.GIT.BRANCH} branch from ${CONFIG.GIT.REPO_URL}"
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: "*/${CONFIG.GIT.BRANCH}"]],
+                        extensions: [],
+                        userRemoteConfigs: [[
+                            credentialsId: CONFIG.GIT.CREDS_ID,
+                            url: CONFIG.GIT.REPO_URL
+                        ]]
+                    ])
+                }
+            }
+        }
+
+        stage('Login to GHCR') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: CONFIG.GIT.CREDS_ID,
+                        usernameVariable: 'GH_USER',
+                        passwordVariable: 'GH_TOKEN'
+                    )
+                ]) {
+                    bat "docker login ${CONFIG.DOCKER.REGISTRY} -u %GH_USER% -p %GH_TOKEN%"
+                }
+            }
+        }
+
+        stage('Build & Push Web') {
+            steps {
+                    bat 'dotnet publish "DemoWebApp.csproj" -c Release -o ./publish /p:UseAppHost=false'
+                    bat """
+                        docker build -t ${CONFIG.DOCKER.REGISTRY}/${CONFIG.DOCKER.ORG}/${CONFIG.DOCKER.WEB_IMAGE}:${IMAGE_TAG} -f ${CONFIG.DOCKER.WEB_DOCKERFILE} .
+                        docker push ${CONFIG.DOCKER.REGISTRY}/${CONFIG.DOCKER.ORG}/${CONFIG.DOCKER.WEB_IMAGE}:${IMAGE_TAG}
+                    """
+            }
+        }
+
+        stage('Logout from GHCR') {
+            steps {
+                bat "docker logout ${CONFIG.DOCKER.REGISTRY}"
+            }
+        }
+
+        stage('Clean Local Docker Images') {
+            steps {
+                echo 'Cleaning up Docker images on Jenkins server...'
+
+                bat """
+                    echo Removing dangling containers...
+                    docker container prune -f
+
+                    echo Removing dangling images...
+                    docker image prune -f
+
+                    echo Removing app images only...
+                    for /f %%i in ('docker images -q ${CONFIG.DOCKER.REGISTRY}/${CONFIG.DOCKER.ORG}/*') do docker rmi -f %%i || echo Image %%i already removed
+                """
+            }
+        }
+
+    }
+    post {
+        success {
+            echo "Triggering Helm GitOps pipeline with image tag ${IMAGE_TAG}"
+
+            build job: 'DemoWebApp-Helm-Update',
+                parameters: [
+                    string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}"),
+                    string(name: 'APP_NAME',  value: 'demo-web-app'),
+                    string(name: 'ENV',       value: 'dev')
+                ],
+                wait: false
+        }
+        always {
+            cleanWs(
+                cleanWhenNotBuilt: false,
+                disableDeferredWipeout: true,
+                deleteDirs: true,
+                notFailBuild: true
+            )
+        }
+    }
+}

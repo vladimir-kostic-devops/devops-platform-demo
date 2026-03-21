@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-web-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/<your-org>/helm-charts.git
+    path: charts/demo-web
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,0 +1,60 @@
+# global values specific to the DEV environment
+global:
+  environment: dev
+
+  labels:
+    app: demo-web-app
+    environment: dev
+
+  # Enforce non-root execution in DEV as well
+  securityContext:
+    enabled: true
+    runAsNonRoot: true
+    runAsUser: 1000
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/your-org/demo-web-app
+  # Image tag managed by CI / Argo CD
+  tag: "1"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+imagePullSecrets:
+  - name: ghcr-registry
+
+# Enable ingress for DEV environment
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: app.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: wildcard-example-com-tls
+      hosts:
+        - app.example.com
+
+# Enable or disable health probes in DEV
+probes:
+  liveness:
+    enabled: false
+    path: /
+    initialDelaySeconds: 10
+    periodSeconds: 15
+
+  readiness:
+    enabled: false
+    path: /
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+# Use the small resource profile for DEV workloads
+resources:
+  profile: small
