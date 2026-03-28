@@ -8,6 +8,7 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+*.sln
 
 # .NET build artifacts
 bin/
