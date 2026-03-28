@@ -15,7 +15,7 @@ global:
 replicaCount: 1
 
 image:
-  repository: ghcr.io/your-org/demo-web-app
+  repository: ghcr.io/vladimir-kostic-devops/demo-web-app
   # Image tag managed by CI / Argo CD
   tag: "1"
   pullPolicy: IfNotPresent

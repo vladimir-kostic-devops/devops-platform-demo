@@ -6,8 +6,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/<your-org>/helm-charts.git
-    path: charts/demo-web
+    repoURL: https://github.com/vladimir-kostic-devops/devops-platform-demo.git
+    path: helm/demo-web-chart
     targetRevision: main
     helm:
       valueFiles:
