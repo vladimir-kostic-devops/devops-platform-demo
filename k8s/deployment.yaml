@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: demo-web-app
-          image: ghcr.io/your-org/demo-web-app:latest
+          image: ghcr.io/vladimir-kostic-devops/demo-web-app:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

@@ -17,7 +17,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/vladimir-kostic-devops/demo-web-app
   # Image tag managed by CI / Argo CD
-  tag: "1"
+  tag: "2"
   pullPolicy: IfNotPresent
 
 service:
@@ -32,14 +32,14 @@ ingress:
   enabled: true
   className: traefik
   hosts:
-    - host: app.example.com
+    - host: demo-web-app.dev.local
       paths:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: wildcard-example-com-tls
+    - secretName: wildcard-dev-local-tls
       hosts:
-        - app.example.com
+        - demo-web-app.dev.local
 
 # Enable or disable health probes in DEV
 probes:
