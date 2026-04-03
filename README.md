@@ -199,6 +199,14 @@ curl http://localhost:8080/health/ready
 
 ---
 
+## Related Projects
+
+| Project | Description |
+|---|---|
+| [SecretNote](https://github.com/vladimir-kostic-devops/secret-note) | Zero-knowledge encrypted self-destructing notes — ASP.NET Core (.NET 10), AES-256-GCM browser encryption, SQL Server, IIS |
+
+---
+
 ## Screenshots
 
 Production pipelines and ArgoCD deployments from a real K3S cluster environment.
