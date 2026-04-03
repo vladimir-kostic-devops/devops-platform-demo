@@ -8,12 +8,12 @@ pool:
 
 variables:
   remoteServer: '192.168.1.30'
-  backendIisSiteName: 'DemoApp2024Backend-Acceptance'
-  backendIisAppPoolName: 'DemoApp2024Backend-Acceptance'
-  frontendIisSiteName: 'DemoApp2024-Acceptance'
-  frontendIisAppPoolName: 'DemoApp2024-Acceptance'
-  remoteBackendPath: 'C:\inetpub\wwwroot\DemoApp2024-Acceptance\backend'
-  remoteFrontendPath: 'C:\inetpub\wwwroot\DemoApp2024-Acceptance'
+  backendIisSiteName: 'DemoAppBackend-Acceptance'
+  backendIisAppPoolName: 'DemoAppBackend-Acceptance'
+  frontendIisSiteName: 'DemoApp-Acceptance'
+  frontendIisAppPoolName: 'DemoApp-Acceptance'
+  remoteBackendPath: 'C:\inetpub\wwwroot\DemoApp-Acceptance\backend'
+  remoteFrontendPath: 'C:\inetpub\wwwroot\DemoApp-Acceptance'
   webAppUrl: 'https://acceptance.example.com'
   # Secrets managed in Azure DevOps Library/Variables (marked secret):
   # - AccDevopsWrmUser
