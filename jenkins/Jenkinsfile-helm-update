@@ -35,8 +35,8 @@ def CONFIG = [
         BRANCH: "main",
         CREDS_ID: "github-pat",
         REPO: 'vladimir-kostic-devops/devops-platform-demo',
-        USER: 'devops-bot',
-        EMAIL: 'devops-bot@users.noreply.github.com'
+        USER: 'github-actions[bot]',
+        EMAIL: '41898282+github-actions[bot]@users.noreply.github.com'
     ],
 
     // 2. HELM / VALUES CONFIGURATION
