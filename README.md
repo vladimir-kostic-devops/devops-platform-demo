@@ -84,13 +84,14 @@ devops-platform-demo/
 │   ├── Jenkinsfile-deploy-qa      # Traditional: SSH deploy to Windows IIS (QA)
 │   └── Jenkinsfile-deploy-prod    # Traditional: SSH deploy to Windows IIS (PROD)
 │
-├── github-actions/
-│   └── ci-cd.yml             # GitHub Actions equivalent: build + push + helm update
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml         # GitHub Actions: build + push + helm update (GitOps)
 │
 ├── argocd/
 │   └── application.yaml      # ArgoCD Application pointing to helm-charts repo
 │
-└── README.MD
+└── README.md
 ```
 
 ---
