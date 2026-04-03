@@ -1,0 +1,401 @@
+trigger:
+  branches:
+    include:
+      - dev   # run only on pushes to dev
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  remoteServer: '192.168.1.30'
+  backendIisSiteName: 'DemoApp2024Backend-Acceptance'
+  backendIisAppPoolName: 'DemoApp2024Backend-Acceptance'
+  frontendIisSiteName: 'DemoApp2024-Acceptance'
+  frontendIisAppPoolName: 'DemoApp2024-Acceptance'
+  remoteBackendPath: 'C:\inetpub\wwwroot\DemoApp2024-Acceptance\backend'
+  remoteFrontendPath: 'C:\inetpub\wwwroot\DemoApp2024-Acceptance'
+  webAppUrl: 'https://acceptance.example.com'
+  # Secrets managed in Azure DevOps Library/Variables (marked secret):
+  # - AccDevopsWrmUser
+  # - AccDevopsWrmUserPass
+  # - TeamsWebhookUrl
+
+stages:
+# =========================
+# BACKEND STAGE
+# =========================
+- stage: Backend
+  displayName: Backend Deployment
+  jobs:
+  - job: DeployBackend
+    displayName: Deploy Backend to Acceptance
+    steps:
+    - checkout: self
+      displayName: Checkout repository
+
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '22.x'
+      displayName: Use Node.js 22
+
+    - script: |
+        cd app\backend
+        npm install --force
+      displayName: Install backend deps on agent
+
+    - script: |
+        echo Copy .env-qa to .env (backend, QA)
+        copy /V /Y app\backend\.env-qa app\backend\.env
+      displayName: Prepare backend .env for QA
+
+    - script: |
+        if exist app\backend\node_modules rmdir /S /Q app\backend\node_modules
+      displayName: Remove local node_modules (do not copy)
+
+    - task: PublishBuildArtifacts@1
+      displayName: Publish backend artifact
+      inputs:
+        PathtoPublish: '$(Build.SourcesDirectory)\app\backend'
+        ArtifactName: 'backend'
+        publishLocation: 'Container'
+
+    - task: DownloadBuildArtifacts@0
+      displayName: Download backend artifact
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'backend'
+        downloadPath: '$(Pipeline.Workspace)'
+
+    - task: PowerShellOnTargetMachines@3
+      displayName: Stop IIS backend site/app pool (remote)
+      inputs:
+        Machines: '$(remoteServer)'
+        UserName: '$(AccDevopsWrmUser)'
+        UserPassword: '$(AccDevopsWrmUserPass)'
+        InlineScript: |
+          Import-Module WebAdministration
+          $site='$(backendIisSiteName)'
+          $pool='$(backendIisAppPoolName)'
+          try { Stop-WebAppPool -Name $pool -ErrorAction SilentlyContinue } catch {}
+          try { Stop-Website   -Name $site -ErrorAction SilentlyContinue } catch {}
+
+    - task: PowerShell@2
+      displayName: Copy backend files to IIS via WinRM
+      inputs:
+        targetType: 'inline'
+        script: |
+          $server = '$(remoteServer)'
+          $user   = '$(AccDevopsWrmUser)'
+          $pass   = '$(AccDevopsWrmUserPass)' | ConvertTo-SecureString -AsPlainText -Force
+          $cred   = New-Object System.Management.Automation.PSCredential ($user, $pass)
+          $so     = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck
+          $port   = 5986
+          $remotePath = '$(remoteBackendPath)'
+          $localPath  = "$(Pipeline.Workspace)\backend"
+
+          Write-Host "Opening session to $server..."
+          $s = New-PSSession -ComputerName $server -Port $port -UseSSL -Credential $cred -SessionOption $so
+
+          Write-Host "Ensuring destination exists: $remotePath"
+          Invoke-Command -Session $s -ScriptBlock {
+            param($path) if (-not (Test-Path $path)) { New-Item -ItemType Directory -Path $path -Force | Out-Null }
+          } -ArgumentList $remotePath
+
+          Write-Host "Copying $localPath -> $remotePath ..."
+          Copy-Item -Path "$localPath\*" -Destination $remotePath -Recurse -Force -ToSession $s
+
+          Remove-PSSession $s
+
+    - task: PowerShellOnTargetMachines@3
+      displayName: Install backend node_modules on server
+      inputs:
+        Machines: '$(remoteServer)'
+        UserName: '$(AccDevopsWrmUser)'
+        UserPassword: '$(AccDevopsWrmUserPass)'
+        InlineScript: |
+          $path='$(remoteBackendPath)'
+          if (!(Test-Path $path)) { New-Item -ItemType Directory -Force -Path $path | Out-Null }
+          Set-Location $path
+          & 'C:\scripts\install_backend_node_modules.bat'
+
+    - task: PowerShellOnTargetMachines@3
+      displayName: Start IIS backend site/app pool (remote)
+      inputs:
+        Machines: '$(remoteServer)'
+        UserName: '$(AccDevopsWrmUser)'
+        UserPassword: '$(AccDevopsWrmUserPass)'
+        InlineScript: |
+          Import-Module WebAdministration
+          $site='$(backendIisSiteName)'
+          $pool='$(backendIisAppPoolName)'
+          try { Start-WebAppPool -Name $pool } catch {}
+          try { Start-Website   -Name $site } catch {}
+
+# =========================
+# FRONTEND STAGE
+# =========================
+- stage: Frontend
+  displayName: Frontend Deployment
+  jobs:
+  - job: DeployFrontend
+    displayName: Deploy Frontend to Acceptance
+    steps:
+    - checkout: self
+      displayName: Checkout repository
+
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '22.x'
+      displayName: Use Node.js 22
+
+    - script: |
+        echo Copy .env-qa to .env (frontend, QA)
+        copy /V /Y app\frontend\.env-qa app\frontend\.env
+      displayName: Prepare frontend .env for QA
+
+    - script: |
+        cd app\frontend
+        npm install --force
+        npm run build
+        echo "Copying .next into frontend for artifact"
+        xcopy /E /I /Y ".next" "$(Build.SourcesDirectory)\app\frontend\.next"
+      displayName: Install frontend deps + Build NextJS + Prepare .next
+
+    - script: |
+        if exist app\frontend\node_modules rmdir /S /Q app\frontend\node_modules
+      displayName: Remove local frontend node_modules (do not copy)
+
+    - task: PublishBuildArtifacts@1
+      displayName: Publish frontend artifact
+      inputs:
+        PathtoPublish: '$(Build.SourcesDirectory)\app\frontend'
+        ArtifactName: 'frontend'
+        publishLocation: 'Container'
+
+    - task: DownloadBuildArtifacts@0
+      displayName: Download frontend artifact
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'frontend'
+        downloadPath: '$(Pipeline.Workspace)'
+
+    - task: PowerShellOnTargetMachines@3
+      displayName: Stop IIS frontend site/app pool (remote)
+      inputs:
+        Machines: '$(remoteServer)'
+        UserName: '$(AccDevopsWrmUser)'
+        UserPassword: '$(AccDevopsWrmUserPass)'
+        InlineScript: |
+          Import-Module WebAdministration
+          $site='$(frontendIisSiteName)'
+          $pool='$(frontendIisAppPoolName)'
+          try { Stop-WebAppPool -Name $pool -ErrorAction SilentlyContinue } catch {}
+          try { Stop-Website   -Name $site -ErrorAction SilentlyContinue } catch {}
+
+    - task: PowerShell@2
+      displayName: Copy frontend files to IIS via WinRM
+      inputs:
+        targetType: 'inline'
+        script: |
+          $server = '$(remoteServer)'
+          $user   = '$(AccDevopsWrmUser)'
+          $pass   = '$(AccDevopsWrmUserPass)' | ConvertTo-SecureString -AsPlainText -Force
+          $cred   = New-Object System.Management.Automation.PSCredential ($user, $pass)
+          $so     = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck
+          $port   = 5986
+          $remotePath = '$(remoteFrontendPath)'
+          $localPath  = "$(Pipeline.Workspace)\frontend"
+
+          Write-Host "Opening session to $server..."
+          $s = New-PSSession -ComputerName $server -Port $port -UseSSL -Credential $cred -SessionOption $so
+
+          Write-Host "Ensuring destination exists: $remotePath"
+          Invoke-Command -Session $s -ScriptBlock {
+            param($path) if (-not (Test-Path $path)) { New-Item -ItemType Directory -Path $path -Force | Out-Null }
+          } -ArgumentList $remotePath
+
+          Write-Host "Copying $localPath -> $remotePath ..."
+          Copy-Item -Path "$localPath\*" -Destination $remotePath -Recurse -Force -ToSession $s
+
+          Remove-PSSession $s
+
+    - task: PowerShellOnTargetMachines@3
+      displayName: Install frontend node_modules on server
+      inputs:
+        Machines: '$(remoteServer)'
+        UserName: '$(AccDevopsWrmUser)'
+        UserPassword: '$(AccDevopsWrmUserPass)'
+        InlineScript: |
+          $path='$(remoteFrontendPath)'
+          if (!(Test-Path $path)) { New-Item -ItemType Directory -Force -Path $path | Out-Null }
+          Set-Location $path
+          & 'C:\scripts\install_frontend_node_modules.bat'
+
+    - task: PowerShellOnTargetMachines@3
+      displayName: Start IIS frontend site/app pool (remote)
+      inputs:
+        Machines: '$(remoteServer)'
+        UserName: '$(AccDevopsWrmUser)'
+        UserPassword: '$(AccDevopsWrmUserPass)'
+        InlineScript: |
+          Import-Module WebAdministration
+          $site='$(frontendIisSiteName)'
+          $pool='$(frontendIisAppPoolName)'
+          try { Start-WebAppPool -Name $pool } catch {}
+          try { Start-Website   -Name $site } catch {}
+
+# =========================
+# NOTIFY STAGE (Adaptive Card)
+# =========================
+- stage: Notify
+  displayName: Post-Deployment Notifications
+  dependsOn:
+    - Backend
+    - Frontend
+  condition: always()
+  jobs:
+  - job: TeamsNotifications
+    displayName: Send Teams Adaptive Card
+    pool:
+      vmImage: 'windows-latest'
+    steps:
+    - checkout: self
+      persistCredentials: true
+    - task: PowerShell@2
+      displayName: Evaluate stage results and send Adaptive Card to Teams
+      condition: always()
+      env:
+        TEAMS_WEBHOOK: $(TeamsWebhookUrl)
+        WEBAPPURL: $(webAppUrl)
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      inputs:
+        targetType: 'inline'
+        script: |
+          $collectionUri = $env:SYSTEM_TEAMFOUNDATIONCOLLECTIONURI.TrimEnd('/')
+          $project       = $env:SYSTEM_TEAMPROJECT
+          $buildId       = $env:BUILD_BUILDID
+          $token         = $env:SYSTEM_ACCESSTOKEN
+          $webAppUrl     = $env:WEBAPPURL
+          $definition    = $env:BUILD_DEFINITIONNAME
+          $buildNumber   = $env:BUILD_BUILDNUMBER
+          $buildUrl      = "$collectionUri/$project/_build/results?buildId=$buildId"
+          $teamsWebhook  = $env:TEAMS_WEBHOOK
+
+          if ([string]::IsNullOrEmpty($teamsWebhook)) {
+            Write-Host "TEAMS_WEBHOOK not set. Define it in Library variables."
+            exit 0
+          }
+
+          $bResult = 'unknown'
+          $fResult = 'unknown'
+          $overall = 'UNKNOWN'
+
+          if ([string]::IsNullOrEmpty($token)) {
+            Write-Host "System.AccessToken is not available. Skipping timeline query."
+          } else {
+            try {
+              $headers = @{ Authorization = "Bearer $token" }
+              $timelineUrl = "$collectionUri/$project/_apis/build/builds/$buildId/timeline?api-version=6.0"
+              Write-Host "Querying timeline: $timelineUrl"
+              $timeline = Invoke-RestMethod -Uri $timelineUrl -Headers $headers -Method Get
+
+              $backendRecord  = $timeline.records | Where-Object { $_.type -eq 'Stage' -and $_.name -eq 'Backend Deployment' } | Select-Object -First 1
+              $frontendRecord = $timeline.records | Where-Object { $_.type -eq 'Stage' -and $_.name -eq 'Frontend Deployment' } | Select-Object -First 1
+
+              if ($backendRecord -and $backendRecord.result)  { $bResult = $backendRecord.result.ToString().ToLower() }
+              if ($frontendRecord -and $frontendRecord.result) { $fResult = $frontendRecord.result.ToString().ToLower() }
+
+              Write-Host "Backend stage result: $bResult"
+              Write-Host "Frontend stage result: $fResult"
+
+              if ($bResult -eq 'failed' -or $fResult -eq 'failed') {
+                $overall = 'FAILED'
+              } elseif ($bResult -eq 'succeededwithissues' -or $fResult -eq 'succeededwithissues') {
+                $overall = 'UNSTABLE'
+              } elseif ($bResult -eq 'succeeded' -and $fResult -eq 'succeeded') {
+                $overall = 'SUCCEEDED'
+              }
+            } catch {
+              Write-Host "Failed to get timeline: $_"
+            }
+          }
+
+          switch ($overall) {
+            'SUCCEEDED' {
+              $msg     = "Acceptance deploy SUCCEEDED for $definition - Build $buildNumber"
+              $color   = "Good"
+              $bgColor = "#90EE90"
+            }
+            'FAILED' {
+              $msg     = "Acceptance deploy FAILED for $definition - Build $buildNumber"
+              $color   = "Attention"
+              $bgColor = "#FFB6C1"
+            }
+            'UNSTABLE' {
+              $msg     = "Acceptance deploy UNSTABLE for $definition - Build $buildNumber"
+              $color   = "Warning"
+              $bgColor = "#FFD580"
+            }
+            Default {
+              $msg     = "Acceptance deploy status: $overall for $definition - Build $buildNumber"
+              $color   = "Default"
+              $bgColor = "#D3D3D3"
+            }
+          }
+
+          $details = "Backend: $bResult | Frontend: $fResult"
+
+          $card = @{
+            type = "message"
+            attachments = @(
+              @{
+                contentType = "application/vnd.microsoft.card.adaptive"
+                content = @{
+                  '$schema' = "http://adaptivecards.io/schemas/adaptive-card.json"
+                  type      = "AdaptiveCard"
+                  version   = "1.2"
+                  body      = @(
+                    @{
+                      type   = "TextBlock"
+                      text   = $msg
+                      wrap   = $true
+                      weight = "Bolder"
+                      color  = $color
+                    },
+                    @{
+                      type    = "TextBlock"
+                      text    = $details
+                      wrap    = $true
+                      spacing = "Small"
+                    }
+                  )
+                  actions = @(
+                    @{
+                      type  = "Action.OpenUrl"
+                      title = "Open Build"
+                      url   = $buildUrl
+                      style = "Positive"
+                    },
+                    @{
+                      type  = "Action.OpenUrl"
+                      title = "Open App"
+                      url   = $webAppUrl
+                      style = "Default"
+                    }
+                  )
+                }
+              }
+            )
+          } | ConvertTo-Json -Depth 10 -Compress
+
+          Write-Host "Sending Adaptive Card payload..."
+
+          try {
+            Invoke-RestMethod -Uri $teamsWebhook -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($card)) -ContentType 'application/json; charset=utf-8'
+            Write-Host "Teams Adaptive Card sent. Status: $overall"
+          } catch {
+            Write-Host "Failed sending Teams message: $_"
+            exit 1
+          }

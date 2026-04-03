@@ -8,6 +8,7 @@ A real-world DevOps pipeline demonstrating end-to-end CI/CD, containerization, K
 |------|---------|
 | Jenkins | CI/CD pipelines (build, push, deploy) |
 | GitHub Actions | Cloud-native CI/CD alternative to Jenkins |
+| Azure Pipelines | Multi-stage CI/CD for Node.js + IIS deployments |
 | Docker | Multi-stage containerization |
 | Kubernetes (K3S) | Container orchestration |
 | Helm | Kubernetes package management |
@@ -86,10 +87,16 @@ devops-platform-demo/
 │
 ├── .github/
 │   └── workflows/
-│       └── ci-cd.yml         # GitHub Actions: build + push + helm update (GitOps)
+│       └── ci-cd.yml              # GitHub Actions: build + push + helm update (GitOps)
+│
+├── azure-pipelines/
+│   └── acceptance-deploy.yml      # Azure Pipelines: Node.js app to IIS via WinRM + Teams notify
 │
 ├── argocd/
-│   └── application.yaml      # ArgoCD Application pointing to helm-charts repo
+│   └── application.yaml           # ArgoCD Application pointing to helm-charts repo
+│
+├── scripts/
+│   └── DeleteFileOnRemoteServer.ps1  # PowerShell: remote IIS folder cleanup via WinRM
 │
 └── README.md
 ```
@@ -129,6 +136,15 @@ Two equivalent implementations of the same pipeline — Jenkins and GitHub Actio
 5. **Deploy PROD** (`Jenkinsfile-deploy-prod`)
    - Same pattern as QA, targets production server
    - Branch: `master`
+
+### Azure Pipelines — Node.js + IIS (`azure-pipelines/acceptance-deploy.yml`)
+
+6. **Acceptance Deploy**
+   - Triggers on push to `dev` branch
+   - Three sequential stages: **Backend → Frontend → Notify**
+   - Backend: installs Node.js deps, publishes artifact, copies to remote IIS via WinRM (HTTPS/5986), restarts app pool
+   - Frontend: builds Next.js app, copies `.next` output to remote IIS via WinRM
+   - Notify: queries Azure DevOps build timeline API to get per-stage results, sends Microsoft Teams Adaptive Card with build status and direct links
 
 ---
 
