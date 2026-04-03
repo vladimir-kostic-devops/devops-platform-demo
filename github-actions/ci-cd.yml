@@ -3,10 +3,10 @@ name: CI/CD Pipeline
 on:
   push:
     branches:
-      - develop
+      - main
   pull_request:
     branches:
-      - develop
+      - main
 
 env:
   REGISTRY: ghcr.io
@@ -62,26 +62,26 @@ jobs:
     name: Update Helm Chart (GitOps)
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
 
     steps:
-      - name: Checkout helm-charts repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          repository: your-org/helm-charts
-          token: ${{ secrets.HELM_CHARTS_PAT }}
-          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update image tag in values-dev.yaml
         run: |
           IMAGE_TAG=${{ needs.build-and-push.outputs.image_tag }}
-          sed -i "s/tag:.*/tag: \"${IMAGE_TAG}\"/" charts/demo-web-app/values-dev.yaml
+          sed -i "s/tag:.*/tag: \"${IMAGE_TAG}\"/" helm/demo-web-chart/values-dev.yaml
           echo "Updated image tag to: ${IMAGE_TAG}"
 
       - name: Commit and push updated Helm values
         run: |
           git config user.name  "devops-bot"
-          git config user.email "devops@example.com"
-          git add charts/demo-web-app/values-dev.yaml
-          git commit -m "ci: update demo-web-app image tag to ${{ needs.build-and-push.outputs.image_tag }}"
+          git config user.email "devops-bot@users.noreply.github.com"
+          git add helm/demo-web-chart/values-dev.yaml
+          git commit -m "ci: update demo-web-app image tag to ${{ needs.build-and-push.outputs.image_tag }}" || echo "No changes to commit"
           git push origin main

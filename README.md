@@ -103,7 +103,7 @@ Two equivalent implementations of the same pipeline — Jenkins and GitHub Actio
 
 1. **Build & Push**
    - Jenkins: `Jenkinsfile-build-push` — triggers via downstream job chain, tags image with `BUILD_NUMBER`
-   - GitHub Actions: `ci-cd.yml` (job: `build-and-push`) — triggers on push to `develop`, tags image with git SHA
+   - GitHub Actions: `ci-cd.yml` (job: `build-and-push`) — triggers on push to `main`, tags image with git SHA
    - Both: `dotnet publish` → `docker build` → push to GHCR
 
 2. **Helm Update**
@@ -179,3 +179,21 @@ curl http://localhost:8080/health/ready
 - **Dual CI tooling**: same pipeline logic implemented in both Jenkins (Groovy) and GitHub Actions (YAML)
 - **Dual deployment strategies**: modern GitOps (K8s) and traditional SSH-based (IIS) in the same repo
 - **Security**: credentials never hardcoded — managed via Jenkins credential store or GitHub Actions secrets
+
+---
+
+## Screenshots
+
+Production pipelines and ArgoCD deployments from a real K3S cluster environment.
+
+### ArgoCD
+
+![ArgoCD App Overview](screenshots/argocd-app-overview.png)
+
+![ArgoCD Sync Status](screenshots/argocd-sync-status.png)
+
+### Jenkins
+
+![Jenkins K3S Pipeline](screenshots/jenkins-k3s-pipeline.png)
+
+![Jenkins IIS Pipeline](screenshots/jenkins-iis-pipeline.png)

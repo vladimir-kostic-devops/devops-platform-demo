@@ -31,17 +31,17 @@ def CONFIG = [
 
     // 1. GIT CONFIGURATION
     GIT: [
-        REPO_URL: "https://github.com/your-org/helm-charts.git",
+        REPO_URL: "https://github.com/vladimir-kostic-devops/devops-platform-demo.git",
         BRANCH: "main",
         CREDS_ID: "github-pat",
-        REPO: 'your-org/helm-charts',
+        REPO: 'vladimir-kostic-devops/devops-platform-demo',
         USER: 'devops-bot',
-        EMAIL: 'devops@example.com'
+        EMAIL: 'devops-bot@users.noreply.github.com'
     ],
 
     // 2. HELM / VALUES CONFIGURATION
     HELM: [
-        WEB_VALUES_DEV: "charts/demo-web-app/values-dev.yaml"
+        WEB_VALUES_DEV: "helm/demo-web-chart/values-dev.yaml"
     ]
 ]
 

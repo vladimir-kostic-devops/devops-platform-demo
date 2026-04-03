@@ -30,15 +30,15 @@ following GitOps best practices.
 def CONFIG = [
     // 1. GIT CONFIGURATION
     GIT: [
-        REPO_URL: "https://github.com/your-org/demo-web-app.git",
-        BRANCH: "develop",
+        REPO_URL: "https://github.com/vladimir-kostic-devops/devops-platform-demo.git",
+        BRANCH: "main",
         CREDS_ID: "github-pat",
     ],
 
     // 2. DOCKER / CONTAINER REGISTRY
     DOCKER: [
         REGISTRY: "ghcr.io",
-        ORG: "your-org",
+        ORG: "vladimir-kostic-devops",
         WEB_IMAGE: "demo-web-app",
         WEB_DOCKERFILE: "Dockerfile"
     ],

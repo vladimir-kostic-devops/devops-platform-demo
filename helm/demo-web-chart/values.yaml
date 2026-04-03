@@ -20,7 +20,7 @@ replicaCount: 1
 
 # image contains container image configuration
 image:
-  repository: ghcr.io/your-org/demo-web-app
+  repository: ghcr.io/vladimir-kostic-devops/demo-web-app
   tag: latest
   pullPolicy: IfNotPresent
 

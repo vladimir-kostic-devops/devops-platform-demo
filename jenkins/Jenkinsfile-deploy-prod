@@ -45,8 +45,8 @@ pipeline {
         stage('Checkout') {
             steps {
                 script {
-                    echo 'Checking out master branch from https://github.com/your-org/demo-web-app.git'
-                    checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[credentialsId: 'github-pat', url: 'https://github.com/your-org/demo-web-app.git']])
+                    echo 'Checking out master branch from https://github.com/vladimir-kostic-devops/devops-platform-demo.git'
+                    checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[credentialsId: 'github-pat', url: 'https://github.com/vladimir-kostic-devops/devops-platform-demo.git']])
                 }
             }
         }
@@ -67,7 +67,7 @@ pipeline {
         stage('Bring Site Back Online') {
             steps {
                 script {
-                    pwsh("C:\\scripts\\DeleteFileOnRemoteServer.ps1 -parmEnvVariableName PROD_WRM_USER -parmServerName <prod-server-ip> -parmFilePath 'c:\\inetpub\\wwwroot\\WebSite PROD\\app_offline.htm'")
+                    pwsh("C:\\scripts\\DeleteFileOnRemoteServer.ps1 -parmEnvVariableName PROD_WRM_USER -parmServerName 192.168.1.10 -parmFilePath 'c:\\inetpub\\wwwroot\\WebSite PROD\\app_offline.htm'")
                 }
             }
         }
