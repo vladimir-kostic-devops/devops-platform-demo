@@ -15,6 +15,7 @@ A real-world DevOps pipeline demonstrating end-to-end CI/CD, containerization, K
 | Argo CD | GitOps continuous delivery |
 | GHCR | GitHub Container Registry (image storage) |
 | Traefik | Ingress controller |
+| Terraform | Infrastructure as Code (Docker local + Azure VM provisioning) |
 | Discord | Pipeline notifications |
 
 ---
@@ -98,6 +99,17 @@ devops-platform-demo/
 ├── scripts/
 │   └── DeleteFileOnRemoteServer.ps1  # PowerShell: remote IIS folder cleanup via WinRM
 │
+├── terraform/
+│   ├── docker-local/                 # Terraform + Docker provider (locally testable)
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   └── azure/                        # Terraform + Azure provider (cloud IaC showcase)
+│       ├── main.tf                   # Resource Group, VNet, NSG, Linux VM
+│       ├── variables.tf
+│       ├── outputs.tf
+│       └── terraform.tfvars.example
+│
 └── README.md
 ```
 
@@ -145,6 +157,30 @@ Two equivalent implementations of the same pipeline — Jenkins and GitHub Actio
    - Backend: installs Node.js deps, publishes artifact, copies to remote IIS via WinRM (HTTPS/5986), restarts app pool
    - Frontend: builds Next.js app, copies `.next` output to remote IIS via WinRM
    - Notify: queries Azure DevOps build timeline API to get per-stage results, sends Microsoft Teams Adaptive Card with build status and direct links
+
+### Terraform — Infrastructure as Code
+
+Two provider configurations in the same repo:
+
+- **`terraform/docker-local/`** — fully testable without a cloud account. Provisions the same `demo-web-app` container via the `kreuzwerker/docker` provider.
+  ```bash
+  cd terraform/docker-local
+  terraform init
+  terraform plan
+  terraform apply      # container starts on localhost:8080
+  terraform destroy
+  ```
+
+- **`terraform/azure/`** — cloud IaC showcase. Provisions a complete Azure environment: Resource Group, Virtual Network, Subnet, Static Public IP, NSG (SSH + HTTP rules), NIC, and Ubuntu 22.04 LTS VM.
+  ```bash
+  cd terraform/azure
+  terraform init
+  terraform validate   # syntax check (no Azure login required)
+  cp terraform.tfvars.example terraform.tfvars
+  # fill in subscription_id, then:
+  terraform plan
+  terraform apply
+  ```
 
 ---
 
@@ -195,7 +231,8 @@ curl http://localhost:8080/health/ready
 - **Image tag as the deployment artifact**: CI writes the tag into Git; ArgoCD reads it from Git
 - **Dual CI tooling**: same pipeline logic implemented in both Jenkins (Groovy) and GitHub Actions (YAML)
 - **Dual deployment strategies**: modern GitOps (K8s) and traditional SSH-based (IIS) in the same repo
-- **Security**: credentials never hardcoded — managed via Jenkins credential store or GitHub Actions secrets
+- **Infrastructure as Code**: Terraform provisions the same app both locally (Docker provider) and on Azure (VM + networking) — same IaC workflow, two target environments
+- **Security**: credentials never hardcoded — managed via Jenkins credential store, GitHub Actions secrets, or `terraform.tfvars` (excluded from git)
 
 ---
 
